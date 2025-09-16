@@ -70,7 +70,7 @@ def main():
                 
                 if len(zero_spend_rows) > 0:
                     if len(critical_campaigns) > 0:
-                        st.subheader("🚨 CRITICAL: Campaigns Running >3 Days with Zero Total Spend (URGENT ATTENTION NEEDED)")
+                        st.subheader("🚨 CRITICAL: Campaigns Running >3 Days with Zero Total Spend")
                         if 'Agency Name' in critical_campaigns.columns:
                             critical_agency_counts = critical_campaigns['Agency Name'].value_counts()
                             st.dataframe(critical_agency_counts.reset_index().rename(columns={'index': 'Agency Name', 'Agency Name': 'Critical Zero Spend Count'}))
