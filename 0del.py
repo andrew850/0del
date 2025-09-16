@@ -4,7 +4,7 @@ import io
 from datetime import datetime
 
 def main():
-    st.title("Andrew's Pacing Tracker")
+    st.title("AdLib Critical Pacing Tracker")
     st.write("Upload a CSV file to find all campaigns where 'Spend Yesterday' equals 0")
     
     uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
@@ -22,6 +22,8 @@ def main():
                 active_zero_spend = zero_spend_rows.copy()
                 off_campaigns = pd.DataFrame()
                 expired_campaigns = pd.DataFrame()
+                future_start_campaigns = pd.DataFrame()
+                critical_campaigns = pd.DataFrame()
                 
                 if 'Campaign Status' in df.columns:
                     off_campaigns = zero_spend_rows[zero_spend_rows['Campaign Status'] == 'Off']
@@ -29,17 +31,51 @@ def main():
                 
                 if 'Campaign End Date' in df.columns:
                     df['Campaign End Date'] = pd.to_datetime(df['Campaign End Date'], errors='coerce')
-                    today = datetime.now()
-                    expired_mask = df['Campaign End Date'] < today
+                    today = datetime.now().date()
+                    expired_mask = df['Campaign End Date'].dt.date < today
                     expired_campaigns = zero_spend_rows[zero_spend_rows.index.isin(df[expired_mask].index)]
                     active_zero_spend = active_zero_spend[~active_zero_spend.index.isin(expired_campaigns.index)]
+
+                if 'Campaign Start Date' in df.columns:
+                    df['Campaign Start Date'] = pd.to_datetime(df['Campaign Start Date'], errors='coerce')
+                    future_start_mask = df['Campaign Start Date'].dt.date >= today
+                    future_start_campaigns = zero_spend_rows[zero_spend_rows.index.isin(df[future_start_mask].index)]
+                    active_zero_spend = active_zero_spend[~active_zero_spend.index.isin(future_start_campaigns.index)]
+
+                    # Find critical campaigns: running >3 days with zero total spend
+                    from datetime import timedelta
+                    three_days_ago = today - timedelta(days=3)
+                    old_start_mask = df['Campaign Start Date'].dt.date < three_days_ago
+
+                    # Check for total spend column (try common variants)
+                    spend_columns = ['Spend', 'Total Spend', 'Lifetime Spend', 'Campaign Spend']
+                    spend_col = None
+                    for col in spend_columns:
+                        if col in df.columns:
+                            spend_col = col
+                            break
+
+                    if spend_col is not None:
+                        zero_total_spend_mask = df[spend_col] == 0
+                        critical_mask = old_start_mask & zero_total_spend_mask
+                        critical_campaigns = zero_spend_rows[zero_spend_rows.index.isin(df[critical_mask].index)]
+                        active_zero_spend = active_zero_spend[~active_zero_spend.index.isin(critical_campaigns.index)]
                 
                 st.write(f"**Total rows with Spend Yesterday = 0:** {len(zero_spend_rows)}")
+                st.write(f"**🚨 CRITICAL: Old campaigns with zero total spend:** {len(critical_campaigns)}")
                 st.write(f"**Active campaigns with zero spend:** {len(active_zero_spend)}")
                 st.write(f"**Campaigns with status 'Off':** {len(off_campaigns)}")
                 st.write(f"**Expired campaigns:** {len(expired_campaigns)}")
+                st.write(f"**Campaigns with future start dates:** {len(future_start_campaigns)}")
                 
                 if len(zero_spend_rows) > 0:
+                    if len(critical_campaigns) > 0:
+                        st.subheader("🚨 CRITICAL: Campaigns Running >3 Days with Zero Total Spend (URGENT ATTENTION NEEDED)")
+                        if 'Agency Name' in critical_campaigns.columns:
+                            critical_agency_counts = critical_campaigns['Agency Name'].value_counts()
+                            st.dataframe(critical_agency_counts.reset_index().rename(columns={'index': 'Agency Name', 'Agency Name': 'Critical Zero Spend Count'}))
+                        st.dataframe(critical_campaigns)
+
                     if len(active_zero_spend) > 0:
                         st.subheader("⚠️ Active Campaigns with Zero Spend (Needs Attention)")
                         if 'Agency Name' in active_zero_spend.columns:
@@ -54,6 +90,10 @@ def main():
                     if len(expired_campaigns) > 0:
                         st.subheader("📅 Expired Campaigns (Expected Zero Spend)")
                         st.dataframe(expired_campaigns)
+
+                    if len(future_start_campaigns) > 0:
+                        st.subheader("🚀 Campaigns with Future Start Dates (Expected Zero Spend)")
+                        st.dataframe(future_start_campaigns)
                     
                     csv_buffer = io.StringIO()
                     zero_spend_rows.to_csv(csv_buffer, index=False)
