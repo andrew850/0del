@@ -42,11 +42,11 @@ def main():
                     future_start_campaigns = zero_spend_rows[zero_spend_rows.index.isin(df[future_start_mask].index)]
                     active_zero_spend = active_zero_spend[~active_zero_spend.index.isin(future_start_campaigns.index)]
 
-                    # Find critical campaigns: running >3 days with zero total spend
-                    from datetime import timedelta
-                    three_days_ago = today - timedelta(days=3)
-                    old_start_mask = df['Campaign Start Date'].dt.date < three_days_ago
+                # Find critical campaigns from remaining active campaigns: running >2 days with zero total spend
+                from datetime import timedelta
+                two_days_ago = today - timedelta(days=2)
 
+                if 'Campaign Start Date' in df.columns:
                     # Check for total spend column (try common variants)
                     spend_columns = ['Spend', 'Total Spend', 'Lifetime Spend', 'Campaign Spend']
                     spend_col = None
@@ -56,9 +56,11 @@ def main():
                             break
 
                     if spend_col is not None:
+                        old_start_mask = df['Campaign Start Date'].dt.date < two_days_ago
                         zero_total_spend_mask = df[spend_col] == 0
+                        # Only consider campaigns from active_zero_spend (which already excludes Off/expired/future)
                         critical_mask = old_start_mask & zero_total_spend_mask
-                        critical_campaigns = zero_spend_rows[zero_spend_rows.index.isin(df[critical_mask].index)]
+                        critical_campaigns = active_zero_spend[active_zero_spend.index.isin(df[critical_mask].index)]
                         active_zero_spend = active_zero_spend[~active_zero_spend.index.isin(critical_campaigns.index)]
                 
                 st.write(f"**Total rows with Spend Yesterday = 0:** {len(zero_spend_rows)}")
@@ -70,7 +72,7 @@ def main():
                 
                 if len(zero_spend_rows) > 0:
                     if len(critical_campaigns) > 0:
-                        st.subheader("🚨 CRITICAL: Campaigns Running >3 Days with Zero Total Spend")
+                        st.subheader("🚨 CRITICAL: Campaigns Running >2 Days with Zero Total Spend")
                         if 'Agency Name' in critical_campaigns.columns:
                             critical_agency_counts = critical_campaigns['Agency Name'].value_counts()
                             st.dataframe(critical_agency_counts.reset_index().rename(columns={'index': 'Agency Name', 'Agency Name': 'Critical Zero Spend Count'}))
